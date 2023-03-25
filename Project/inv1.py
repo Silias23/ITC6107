@@ -34,7 +34,7 @@ producer = KafkaProducer(
 )
 
 
-def process_messages(messages, portfolio, previous_value,Pname):
+def process_messages(messages, portfolio, previous_value,Iname,Pname):
     tickers = set(portfolio.keys())
     total_value = 0
     # print(f'message: \n{messages}')
@@ -55,12 +55,12 @@ def process_messages(messages, portfolio, previous_value,Pname):
     previous_value = total_value
     print(f"Total portfolio value: {total_value:.2f}, {daily_change}, {percentage_change}")
     json_object = {
-        "investor": '1',
+        "investor": Iname,
         "portfolio_name": Pname,
         "Date": data["tickers"][0]["TS"],
-        "total_value": str(total_value),
-        "daily_change": str(daily_change),
-        "percentage_change": str(percentage_change)
+        "total_value": total_value,
+        "daily_change": daily_change,
+        "percentage_change": percentage_change
     }
     return previous_value, json_object
 
@@ -78,12 +78,12 @@ portfolio_1 = {
                "FB": 1900,
                "AMZN": 2500,
                "GOOG": 1900,
-               "TWTR": 2400,
+               "AVGO": 2400,
                }
 
 
 portfolio_2 = {
-    "LNKD": 2900,
+    "VZ": 2900,
     "INTC": 2600,
     "AMD": 2100,
     "MSFT": 1200,
@@ -110,9 +110,9 @@ while True:
     merged = {"tickers": dict1['tickers'] + dict2['tickers']}
     day_messages = json.dumps(merged)
 
-    portfolio_1_value,data1 = process_messages(day_messages, portfolio_1, portfolio_1_value,'P11')
+    portfolio_1_value,data1 = process_messages(day_messages, portfolio_1, portfolio_1_value,'Inv1','P11')
     sender(producer,data1)
-    portfolio_2_value,data2 = process_messages(day_messages, portfolio_2, portfolio_2_value,'P12')
+    portfolio_2_value,data2 = process_messages(day_messages, portfolio_2, portfolio_2_value,'Inv1','P12')
     sender(producer,data2)
 
     

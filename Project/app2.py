@@ -1,212 +1,171 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, max, min, to_date, avg, stddev
-from pyspark.sql.functions import year, col, month, date_format
-from pyspark.sql.functions import format_string
-from pyspark.sql.types import DoubleType, StringType
-import pandas as pd
-# Create a SparkSession
-spark = SparkSession.builder.appName("Investor Portfolios").getOrCreate()
+from pyspark.sql.functions import max, min, to_date, avg, stddev
+from pyspark.sql.functions import year, col, date_format
 
 
-portfolio_data = spark.read.csv("BGF-WTF-A2-EUR_fund1(1).csv", header=True, inferSchema=True)
+# Select Investor to produce stats for their portfolios
+investor_name = "Inv1"
+# Select the year range used in Q4 for the portfolio evaluation
+year_range = ['2010', '2012']
 
-portfolio_data = portfolio_data.withColumn("As Of", to_date("As Of", "d-MMM-yy"))
 
-
-# Retrieve data from each portfolio table and store it in a dictionary
-'''
-Q1
-'''
-
-# daily_changes = portfolio_data.select((col("Daily NAV Change")).alias("Daily Change"))
-# percentage_changes = portfolio_data.select((col("Daily NAV Change %")).alias("Percentage Change"))
-# max_daily_change = daily_changes.select(col("Daily Change")).orderBy(col("Daily Change").desc()).first()[0]
-# min_daily_change = daily_changes.select(col("Daily Change")).orderBy(col("Daily Change").asc()).first()[0]
-# max_percentage_change = percentage_changes.select(col("Percentage Change")).orderBy(col("Percentage Change").desc()).first()[0]
-# min_percentage_change = percentage_changes.select(col("Percentage Change")).orderBy(col("Percentage Change").asc()).first()[0]
-# print(f"Maximum Daily Change: {max_daily_change:.2f}")
-# print(f"Minimum Daily Change: {min_daily_change:.2f}")
-# print(f"Maximum Percentage Change: {max_percentage_change:.2f}%")
-# print(f"Minimum Percentage Change: {min_percentage_change:.2f}%")
-
-def result_writer(file,description,filename):
+# function to write the results for each question in a text file
+def result_writer(file, description, file_name):
     spark_df = file
+    # convert to Pandas df to solve issues with datatypes
+    # anything but stringtype cannot be written in file from a spark df
     pandas_df = spark_df.toPandas()
-    with open(f'{filename}.txt', 'a') as f:
+    with open(f'{file_name}_stats.txt', 'a') as f:
         f.write(f'{description}')
-        pandas_df.to_csv(f,sep='\t', index = False)
+        pandas_df.to_csv(f, sep='\t', index=False)
         f.write('\n')
 
 
+# given an investor name and portfolio, retrieve the table for processing
+def retrieve_portfolio_data(investor, portfolio):
+    query1 = f"(SELECT * FROM {investor}_{portfolio})as tmp"
+    df_portfolio = spark_sql.read.format("jdbc") \
+        .option("url", url) \
+        .option("driver", driver) \
+        .option("dbtable", query1) \
+        .option("user", user) \
+        .option("password", password).load()
+    return df_portfolio
 
 
-def calculate_portfolio_statistics(df,filename):
-
-    portfolio_stats = df.agg(max("Daily NAV Change").alias("Max(Daily NAV Change)"),
-                                min("Daily NAV Change").alias("Min(Daily NAV Change)"),
-                                max("Daily NAV Change %").alias("Max(Daily NAV Change %)"),
-                                min("Daily NAV Change %").alias("Min(Daily NAV Change %)")
-                                    )
+'''
+Q1
+'''
+def calculate_portfolio_statistics(df, filename):
+    # calculate the min and max for the daily and percentage change for the entire portfolio
+    portfolio_stats = df.agg(max("daily_change").alias("Max(Daily Change)"),
+                             min("daily_change").alias("Min(Daily Change)"),
+                             max("percentage_change").alias("Max(Daily Change %)"),
+                             min("percentage_change").alias("Min(Daily Change %)")
+                             )
     portfolio_stats.show()
-    result_writer(portfolio_stats,'Portfolio Stats:\n',filename)
+    result_writer(portfolio_stats, 'Portfolio Stats:\n', filename)
     return portfolio_stats
-
 
 
 '''
 Q2
 '''
-
-
-
-def portfolio_calc_year(df,filename):
+def portfolio_calc_year(df, filename):
     # Add a "Year" column to the DataFrame
-    df_with_year = df.withColumn("Year", year(col("As Of")))
-    
-    # Group the DataFrame by year and calculate the maximum and minimum daily changes and percentage changes for each year
-    stats_by_year = df_with_year.groupBy("Year")\
-                                .agg(max("Daily NAV Change").alias("Max(Daily NAV Change)"),
-                                    min("Daily NAV Change").alias("Min(Daily NAV Change)"),
-                                    max("Daily NAV Change %").alias("Max(Daily NAV Change %)"),
-                                    min("Daily NAV Change %").alias("Min(Daily NAV Change %)")
-                                        )\
-                                .orderBy("Year")                    
-    
+    df_with_year = df.withColumn("Year", year(col("Date")))
+
+    # Group the DataFrame by year and calculate
+    # the maximum and minimum daily changes and percentage changes for each year
+    stats_by_year = df_with_year.groupBy("Year") \
+        .agg(max("daily_change").alias("Max(Daily Change)"),
+             min("daily_change").alias("Min(Daily Change)"),
+             max("percentage_change").alias("Max(Daily Change %)"),
+             min("percentage_change").alias("Min(Daily Change %)")
+             ) \
+        .orderBy("Year")
+
     stats_by_year.show()
-    result_writer(stats_by_year,'Portfolio Stats Per Year:\n',filename)
+    result_writer(stats_by_year, 'Portfolio Stats Per Year:\n', filename)
     return stats_by_year
-
-
-
-
 
 
 '''
 Q3
 '''
-
-
-def calculate_portfolio_avg_std(df,filename):
-
-    portfolio_avg_std = df.agg(avg("NAV per Share").alias("Average Evaluation"),
-                                stddev("NAV per Share").alias("Standard Deviation"),
-                            )
-    
+def calculate_portfolio_avg_std(df, filename):
+    # calculate the average and standard deviation for the entire portfolio
+    portfolio_avg_std = df.agg(avg("total_value").alias("Average Evaluation"),
+                               stddev("total_value").alias("Standard Deviation"),
+                               )
     portfolio_avg_std.show()
-    result_writer(portfolio_avg_std,'Portfolio Average and Std. Deviation:\n',filename)
+    result_writer(portfolio_avg_std, 'Portfolio Average and Std. Deviation:\n', filename)
     return portfolio_avg_std
-
-
-
-
-
 
 
 '''
 Q4
 '''
+def calculate_portfolio_avg_std_year(df, fyears, filename):
+    # column used for the grouping, the filtering will be made based on the conversion of 'Date' column
+    df_with_year = df.withColumn("Year", year(col("Date")))
+    df_with_year = df_with_year.filter((year("Date") >= fyears[0]) & (year("Date") <= fyears[1]))
 
+    portfolio_avg_std = df_with_year.groupBy("Year") \
+        .agg(avg("total_value").alias("Average Evaluation"),
+             stddev("total_value").alias("Standard Deviation"),
+             ) \
+        .orderBy("Year")
 
-def calculate_portfolio_avg_std_year(df,fyears,filename):
-    #column used for the grouping, the filtering will be made based on the conversion of 'As of' column
-    df_with_year = df.withColumn("Year", year(col("As Of")))
-    df_with_year = df_with_year.filter((year("As Of") >= fyears[0]) & (year("As Of") <= fyears[1]))
-
-    portfolio_avg_std = df_with_year.groupBy("Year")\
-                                    .agg(avg("NAV per Share").alias("Average Evaluation"),
-                                        stddev("NAV per Share").alias("Standard Deviation"),
-                                        )\
-                                    .orderBy("Year")
-    
     portfolio_avg_std.show()
-    result_writer(portfolio_avg_std,f'Portfolio Average and Std. Deviation for years {fyears[0]} - {fyears[1]}:\n',filename)
+    result_writer(portfolio_avg_std, f'Portfolio Average and Std. Deviation for years {fyears[0]} - {fyears[1]}:\n',
+                  filename)
     return portfolio_avg_std
-
-
 
 
 '''
 Q5
 '''
-
-def calculate_portfolio_month_avg(df,filename):
-
+def calculate_portfolio_month_avg(df, filename):
     # Add a "Month" column to the DataFrame
-    df_with_month = df.withColumn("Month", date_format(to_date(col("As Of"), "yyyy-MM-dd"), 'yyyy-MM'))
+    df_with_month = df.withColumn("Month", date_format(to_date(col("Date"), "yyyy-MM-dd"), 'yyyy-MM'))
     # df_with_month.show()
     # Group the DataFrame by month and calculate the average "NAV per Share" for each month
-    monthly_averages = df_with_month.groupBy("Month")\
-                                    .agg(avg("NAV per Share").alias("Average NAV per Share"))\
-                                    .orderBy(col("Month").desc())
-    
+    monthly_averages = df_with_month.groupBy("Month") \
+        .agg(avg("total_value").alias("Average NAV per Share")) \
+        .orderBy(col("Month").desc())
+
     monthly_averages.show()
-    result_writer(monthly_averages,'Monthly Averages:\n',filename)
+    result_writer(monthly_averages, 'Monthly Averages:\n', filename)
     return monthly_averages
 
 
-#calculate_portfolio_month_avg(portfolio_data)
+# parameters for the mysql db connection
+url = "jdbc:mysql://localhost:3306/InvestorsDB"
+driver = "com.mysql.jdbc.Driver"
+user = "itc6107"
+password = "itc6107"
 
 
+# Use spark to connect to the sql db
+spark_sql = SparkSession.builder.master("local[1]") \
+    .config("spark.jars", "/usr/share/java/mysql-connector-java-8.0.28.jar") \
+    .appName("6107app").getOrCreate()
 
 
+# SQL query to retrieve the portfolios linked to an investor
+query = f"(SELECT p.id \
+        FROM Portfolios p \
+        INNER JOIN Investors_Portfolios ip ON p.id = ip.pid \
+        INNER JOIN Investors i ON i.id = ip.iid\
+        WHERE i.id = '{investor_name}' \
+        ) as tmp"
+
+# extract the portfolio names linked to the investor
+df = spark_sql.read.format("jdbc") \
+    .option("url", url) \
+    .option("driver", driver) \
+    .option("dbtable", query) \
+    .option("user", user) \
+    .option("password", password).load()
+
+# Convert the DataFrame to a Python list
+portfolio_list = [row["id"] for row in df.collect()]
 
 
+# for every portfolio name in the list, retrieve the data of the portfolio and produce all the stats
+for portfolio_name in portfolio_list:
+    portfolio_data = retrieve_portfolio_data(investor_name, portfolio_name)
+    # portfolio_data.show()
+    filename = f'{investor_name}_{portfolio_name}'  # f'{investor}_{portfolio}.txt'
 
-
-
-
-
-
-
-# # Connect to the MySQL database
-# url = "jdbc:mysql://<hostname>:<port>/<database>"
-# properties = {
-#     "driver": "com.mysql.jdbc.Driver",
-#     "user": "<username>",
-#     "password": "<password>"
-# }
-
-# # Define the SQL query to retrieve the portfolios linked to an investor
-# investor_name = "Inv1"
-# query = f"""
-#     SELECT p.Name
-#     FROM Portfolios p
-#     INNER JOIN Investors_Portfolios ip ON p.Id = ip.pid
-#     INNER JOIN Investors i ON i.Id = ip.iid
-#     WHERE i.Name = '{investor_name}'
-# """
-
-# # Load the data into a Spark DataFrame
-# df = spark.read.jdbc(url=url, table=query, properties=properties)
-
-# # Convert the DataFrame to a Python list
-# portfolio_list = [row["Name"] for row in df.collect()]
-
-# # Print the list
-# print(portfolio_list)
-
-
-# # Define a function to retrieve data from each portfolio table
-# def retrieve_portfolio_data(investor,portfolio):
-#     query = f"SELECT * FROM {investor}_{portfolio}"
-#     df = spark.read.jdbc(url=url, table=query, properties=properties)
-#     return df
-
-results = []
-
-# for portfolio_name in portfolio_list:
-#     portfolio_data = retrieve_portfolio_data(investor_name, portfolio_name)
-
-filename = 'results' #f'{investor}_{portfolio}.txt'
-calculate_portfolio_statistics(portfolio_data,filename)
-
-
-portfolio_calc_year(portfolio_data,filename)
-calculate_portfolio_avg_std(portfolio_data,filename)
-yearrange = ['2019','2020']
-calculate_portfolio_avg_std_year(portfolio_data,yearrange,filename)
-calculate_portfolio_month_avg(portfolio_data,filename)
-
-
-
-
+    # Q1
+    calculate_portfolio_statistics(portfolio_data, filename)
+    # Q2
+    portfolio_calc_year(portfolio_data, filename)
+    # Q3
+    calculate_portfolio_avg_std(portfolio_data, filename)
+    # Q4
+    calculate_portfolio_avg_std_year(portfolio_data, year_range, filename)
+    # Q5
+    calculate_portfolio_month_avg(portfolio_data, filename)

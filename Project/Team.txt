@@ -1,0 +1,18 @@
+Work performed by:
+
+Effrosyni Koutroumanou
+*Stock Exchange Servers/Producer Creation
+*Database and Table Creation
+*App1 for Database Population
+
+Ilias Siafakas
+*Institutional Investor Creation
+*App2 for Spark Results Creation
+*General Setup/Cleanup/Initialization of process
+
+
+
+Percentage of Contribution:
+
+Effrosyni Koutroumanou 50%
+Ilias Siafakas 50%

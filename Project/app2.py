@@ -4,9 +4,9 @@ from pyspark.sql.functions import year, col, date_format
 
 
 # Select Investor to produce stats for their portfolios
-investor_name = "Inv1"
+investor_name = "Inv3"
 # Select the year range used in Q4 for the portfolio evaluation
-year_range = ['2010', '2012']
+year_range = ['2000', '2002']
 
 
 # function to write the results for each question in a text file
@@ -112,7 +112,7 @@ def calculate_portfolio_month_avg(df, filename):
     # df_with_month.show()
     # Group the DataFrame by month and calculate the average "NAV per Share" for each month
     monthly_averages = df_with_month.groupBy("Month") \
-        .agg(avg("total_value").alias("Average NAV per Share")) \
+        .agg(avg("total_value").alias("Average Evaluation")) \
         .orderBy(col("Month").desc())
 
     monthly_averages.show()
